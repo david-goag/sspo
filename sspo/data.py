@@ -83,6 +83,8 @@ def effort_to_df(athlete: DetailedAthlete, segment: Segment, effort: BaseEffort)
     return effort_df
 
 def store_to_database(athlete: DetailedAthlete, data: pd.DataFrame) -> None:
+    os.makedirs("database/old", exist_ok=True)
+    os.makedirs("database/current", exist_ok=True)
     file_path = Path(f"database/current/{athlete.id}_data.parquet")
     old_file_path = Path(f"database/old/{athlete.id}_data.parquet")
 
