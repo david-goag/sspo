@@ -9,10 +9,9 @@ from pathlib import Path
 ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
 SEGMENT_LIST = os.environ["SEGMENT_LIST"].split(",")
 client = StravaClient(access_token=ACCESS_TOKEN)
-#segment_list = SEGMENT_LIST
 athlete = client.get_athlete()
 
-def collect_data(client, segment_list):
+def collect_data(client: StravaClient, segment_list: list) -> pd.DataFrame:
     athlete = client.get_athlete()
     data_df = pd.DataFrame()
     for segment_id in segment_list:
