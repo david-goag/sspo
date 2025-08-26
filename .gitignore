@@ -10,6 +10,7 @@ __pycache__/
 .Python
 notebooks/
 database/
+*.toml
 build/
 develop-eggs/
 dist/
