@@ -18,3 +18,4 @@ python-math
 TIME-python
 uvicorn
 fastapi
+scikit-learn
