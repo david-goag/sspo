@@ -9,10 +9,9 @@ from pathlib import Path
 ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
 SEGMENT_LIST = os.environ["SEGMENT_LIST"].split(",")
 client = StravaClient(access_token=ACCESS_TOKEN)
-#segment_list = SEGMENT_LIST
 athlete = client.get_athlete()
 
-def collect_data(client, segment_list):
+def collect_data(client: StravaClient, segment_list: list) -> pd.DataFrame:
     athlete = client.get_athlete()
     data_df = pd.DataFrame()
     for segment_id in segment_list:
@@ -83,6 +82,8 @@ def effort_to_df(athlete: DetailedAthlete, segment: Segment, effort: BaseEffort)
     return effort_df
 
 def store_to_database(athlete: DetailedAthlete, data: pd.DataFrame) -> None:
+    os.makedirs("database/old", exist_ok=True)
+    os.makedirs("database/current", exist_ok=True)
     file_path = Path(f"database/current/{athlete.id}_data.parquet")
     old_file_path = Path(f"database/old/{athlete.id}_data.parquet")
 
