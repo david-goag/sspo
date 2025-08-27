@@ -1,2 +1,1 @@
-from fastapi import FastAPI
-app= FastAPI()
+app= xgb_reg.pkl
