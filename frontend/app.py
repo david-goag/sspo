@@ -390,26 +390,14 @@ def show_results_page():
                 get_target_position="[lon_next, lat_next, elevation_next]", get_color="color", get_width=5, pickable=True
             )
 
-            # Create the data for the "wall" effect
-            wall_data = []
-            for i in range(len(map_data) - 1):
-                wall_data.append({
-                    "polygon": [
-                        [map_data['lon'][i], map_data['lat'][i], 0],
-                        [map_data['lon'][i+1], map_data['lat'][i+1], 0],
-                        [map_data['lon'][i+1], map_data['lat'][i+1], map_data['smoothed_elevation'][i+1]],
-                        [map_data['lon'][i], map_data['lat'][i], map_data['smoothed_elevation'][i]]
-                    ],
-                    "color": line_segments_df['color'].iloc[i]
-                })
-            wall_df = pd.DataFrame(wall_data)
-
-            wall_layer = pdk.Layer(
-                "PolygonLayer",
-                data=wall_df,
-                get_polygon="polygon",
-                get_fill_color="color",
-                stroked=False,
+            # Layer for the vertical lines connecting the 3D path to the 2D map
+            vertical_line_layer = pdk.Layer(
+                "LineLayer",
+                data=map_data,
+                get_source_position="[lon, lat, 0]",
+                get_target_position="[lon, lat, smoothed_elevation]",
+                get_color="[180, 180, 180, 100]", # Light grey, semi-transparent
+                get_width=1
             )
 
             start_point, end_point = map_data.iloc[[0]], map_data.iloc[[-1]]
@@ -437,7 +425,7 @@ def show_results_page():
 
             st.pydeck_chart(pdk.Deck(
                 map_style="mapbox://styles/mapbox/dark-v10",
-                layers=[line_layer, wall_layer, icon_layer, wind_arrow_layer],
+                layers=[line_layer, vertical_line_layer, icon_layer, wind_arrow_layer],
                 initial_view_state=view_state,
                 tooltip={"html": "<b>Gradient:</b> {gradient:.1f}%"}
             ))
