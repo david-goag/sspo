@@ -1,23 +1,27 @@
 # data_collection.py
 import os
-import pandas as pd
-import numpy as np
-from pathlib import Path
 from stravalib import Client as StravaClient
 from stravalib.model import DetailedAthlete, Segment, BaseEffort
+import numpy as np
+import pandas as pd
 import openmeteo_requests
+from pathlib import Path
 import time # To add a small delay and be respectful to APIs
 
 # --- INITIALIZATION ---
-# It's good practice to handle potential missing environment variables
+print("=============================================")
+print("      Starting Strava Data Collection        ")
+print("=============================================")
 try:
     ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
     SEGMENT_LIST = os.environ["SEGMENT_LIST"].split(",")
+    print("✅ Environment variables loaded successfully.")
 except KeyError as e:
     print(f"❌ Error: Environment variable {e} not set. Please set your ACCESS_TOKEN and SEGMENT_LIST.")
     exit()
 
 client = StravaClient(access_token=ACCESS_TOKEN)
+athlete = client.get_athlete()
 
 def collect_data(client: StravaClient, segment_list: list) -> pd.DataFrame:
     """Iterates through a list of segments, collecting all powered efforts."""
@@ -33,10 +37,13 @@ def collect_data(client: StravaClient, segment_list: list) -> pd.DataFrame:
             segment = client.get_segment(segment_id)
             print(f"   - Segment Name: '{segment.name}'")
 
-            segment_efforts = list(client.get_segment_efforts(segment_id))
+            segment_efforts = client.get_segment_efforts(segment_id)
 
-            powered_segment_efforts = [e for e in segment_efforts if e.device_watts]
-            print(f"   - Found {len(segment_efforts)} total efforts, {len(powered_segment_efforts)} with power data.")
+            powered_segment_efforts = []
+            for effort in segment_efforts:
+                powered_segment_efforts.append(effort) if effort.device_watts == True else True
+
+            print(f"   - Found {len(list(client.get_segment_efforts(segment_id)))} total efforts, {len(powered_segment_efforts)} with power data.")
 
             if not powered_segment_efforts:
                 print("   - ⚠️ No powered efforts found for this segment. Skipping.")
@@ -45,7 +52,7 @@ def collect_data(client: StravaClient, segment_list: list) -> pd.DataFrame:
             for j, powered_effort in enumerate(powered_segment_efforts):
                 print(f"     - Fetching data for effort {j+1}/{len(powered_segment_efforts)}...")
                 single_df = effort_to_df(athlete, segment, powered_effort)
-                data_df = pd.concat([data_df, single_df], axis=0, ignore_index=True)
+                data_df = pd.concat([data_df, single_df], axis=0)
                 time.sleep(0.5) # Small delay to be respectful to the weather API
 
         except Exception as e:
@@ -59,10 +66,10 @@ def effort_to_df(athlete: DetailedAthlete, segment: Segment, effort: BaseEffort)
     openmeteo = openmeteo_requests.Client()
     url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
-        "latitude": segment.start_latlng.lat,
-        "longitude": segment.start_latlng.lon,
-        "start_date": effort.start_date_local.strftime('%Y-%m-%d'),
-        "end_date": effort.start_date_local.strftime('%Y-%m-%d'),
+        "latitude": segment.start_latlng.root[0],
+        "longitude": segment.start_latlng.root[1],
+        "start_date": f"{effort.start_date_local.year}-{effort.start_date_local.month:02d}-{effort.start_date_local.day:02d}",
+        "end_date": f"{effort.start_date_local.year}-{effort.start_date_local.month:02d}-{effort.start_date_local.day:02d}",
         "hourly": ["temperature_2m", "wind_speed_10m", "wind_direction_10m"],
         "timezone": "auto",
     }
@@ -70,34 +77,43 @@ def effort_to_df(athlete: DetailedAthlete, segment: Segment, effort: BaseEffort)
     response = responses[0]
     hourly = response.Hourly()
 
-    effort_dict = {
-        'id': [effort.id],
-        'athlete_weight': [athlete.weight],
-        'distance': [segment.distance.to_dict().get('num')],
-        'avg_grade': [round(segment.average_grade, 1)],
-        'max_grade': [round(segment.maximum_grade, 1)],
-        'elevation_gain': [segment.total_elevation_gain.to_dict().get('num')],
-        "start_latitude": [segment.start_latlng.lat],
-        "start_longitude": [segment.start_latlng.lon],
-        "end_latitude": [segment.end_latlng.lat],
-        "end_longitude": [segment.end_latlng.lon],
-        'avg_power': [effort.average_watts],
-        'temperature': [hourly.Variables(0).Values(effort.start_date_local.hour)],
-        'wind_speed': [hourly.Variables(1).Values(effort.start_date_local.hour)],
-        'wind_direction': [hourly.Variables(2).Values(effort.start_date_local.hour)],
-        'time': [effort.moving_time.total_seconds()]
+    effort_dict = {'id': [effort.id],
+    'athlete_weight': [athlete.weight],
+    'distance': [segment.distance],
+    'avg_grade': [round(segment.average_grade, 1)],
+    'max_grade': [round(segment.maximum_grade, 1)],
+    'elevation_gain': [segment.total_elevation_gain],
+    "start_latitude": [segment.start_latlng.root[0]],
+    "start_longitude": [segment.start_latlng.root[1]],
+    "end_latitude": [segment.end_latlng.root[0]],
+    "end_longitude": [segment.end_latlng.root[1]],
+    'avg_power': [effort.average_watts],
+    'temperature': [hourly.Variables(0).Values(effort.start_date_local.hour)],
+    'wind_speed': [hourly.Variables(1).Values(effort.start_date_local.hour)],
+    'wind_direction': [hourly.Variables(2).Values(effort.start_date_local.hour)],
+    'time': [effort.moving_time]
     }
 
-    effort_dtypes = {
-        'id': np.int64, 'athlete_weight': np.int8, 'distance': np.int32,
-        'avg_grade': np.float16, 'max_grade': np.float16, 'elevation_gain': np.int16,
-        "start_latitude": np.float16, "start_longitude": np.float16,
-        "end_latitude": np.float16, "end_longitude": np.float16,
-        'avg_power': np.int16, 'temperature': np.int8, 'wind_speed': np.int8,
-        'wind_direction': np.int16, 'time': np.int16
+    effort_dtypes = {'id': np.int64,
+    'athlete_weight': np.int8,
+    'distance': np.int32,
+    'avg_grade': np.float16,
+    'max_grade': np.float16,
+    'elevation_gain': np.int16,
+    "start_latitude": np.float16,
+    "start_longitude": np.float16,
+    "end_latitude": np.float16,
+    "end_longitude": np.float16,
+    'avg_power': np.int16,
+    'temperature': np.int8,
+    'wind_speed': np.int8,
+    'wind_direction': np.int16,
+    'time': np.int16
     }
 
-    effort_df = pd.DataFrame(effort_dict).astype(effort_dtypes)
+    effort_df = pd.DataFrame(effort_dict)
+    effort_df = effort_df.astype(effort_dtypes)
+
     return effort_df
 
 def store_to_database(athlete: DetailedAthlete, data: pd.DataFrame) -> None:
@@ -124,12 +140,12 @@ def store_to_database(athlete: DetailedAthlete, data: pd.DataFrame) -> None:
         print(f"   - Backup of old data saved to '{old_file_path}'.")
 
         # Combine and remove duplicates, keeping the new data
-        combined_df = pd.concat([database_df, data]).drop_duplicates(subset=['id'], keep='last')
+        database_df.join(data, on="id", lsuffix="left", rsuffix="right", how="outer")
 
-        new_rows = len(combined_df) - len(database_df)
+        new_rows = len(database_df.join(data, on="id", lsuffix="left", rsuffix="right", how="outer")) - len(database_df)
         print(f"   - Merged data: {new_rows} new efforts added.")
 
-        combined_df.to_parquet(file_path, engine='fastparquet')
+        database_df.to_parquet(file_path, engine='fastparquet')
     else:
         print(f"   - No existing database found. Creating new file.")
         data.to_parquet(file_path, engine='fastparquet')
@@ -138,14 +154,11 @@ def store_to_database(athlete: DetailedAthlete, data: pd.DataFrame) -> None:
 
 
 if __name__ == "__main__":
-    print("=============================================")
-    print("      Starting Strava Data Collection        ")
-    print("=============================================")
 
     data_df = collect_data(client, SEGMENT_LIST)
 
     if not data_df.empty:
-        store_to_database(data=data_df, athlete=client.get_athlete())
+        store_to_database(data=data_df, athlete=athlete)
     else:
         print("\nNo new data collected. Database remains unchanged.")
 
