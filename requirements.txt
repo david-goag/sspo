@@ -4,3 +4,5 @@ stravalib
 numpy
 fastparquet
 pathlib
+scikit-learn
+xgboost
