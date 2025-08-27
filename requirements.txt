@@ -19,3 +19,4 @@ TIME-python
 uvicorn
 fastapi
 scikit-learn
+tqdm
