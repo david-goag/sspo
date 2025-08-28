@@ -32,55 +32,45 @@ if "access_token" not in st.session_state:
 if "athlete_info" not in st.session_state:
     st.session_state.athlete_info = None
 
-# --- MODEL LOADING ---
-@st.cache_resource
-def load_model():
-    """Loads the trained XGBoost model from a file."""
-    try:
-        # Note: This should be a model trained to predict 'time'
-        model = joblib.load('model.joblib')
-        return model
-    except FileNotFoundError:
-        st.error("Model file ('model.joblib') not found. Please make sure it's in the same directory as app.py.")
-        return None
-
 # --- PREDICTION FUNCTION ---
-def predict_time(model, segment_data, map_data, line_segments_df, weather_data, user_inputs):
-    """Prepares the input data and returns a time prediction from the model."""
-    if model is None:
-        st.error("Model could not be loaded. Cannot make a prediction.")
-        return 720 # Return a default value
+def predict_time_from_api(segment_data, map_data, line_segments_df, weather_data, user_inputs):
+    """Prepares the input data and returns a time prediction from the API."""
+
+    api_url = "https://api-879488749692.europe-west1.run.app/predict"
 
     try:
-        input_data = pd.DataFrame({
-            'athlete_weight': [user_inputs['weight']],
-            'distance': [segment_data['distance']],
-            'avg_grade': [(map_data['elevation'].iloc[-1] - map_data['elevation'].iloc[0]) / segment_data['distance'] * 100 if segment_data['distance'] > 0 else 0],
-            'max_grade': [line_segments_df['gradient'].max()],
-            'elevation_gain': [segment_data['elevation_gain']],
-            'start_latitude': [segment_data['start_latlng'][0]],
-            'start_longitude': [segment_data['start_latlng'][1]],
-            'end_latitude': [map_data['lat'].iloc[-1]],
-            'end_longitude': [map_data['lon'].iloc[-1]],
-            'temperature': [weather_data['temperature']],
-            'wind_speed': [weather_data['wind_speed']],
-            'wind_direction': [weather_data['wind_direction']],
-            'avg_power': [user_inputs['power']] # Use power as an input feature
-        })
+        # Ensure all parameters are cast to the exact data types the model expects.
+        params = {
+            'athlete_weight': np.int8(user_inputs['weight']),
+            'distance': np.int32(segment_data['distance']),
+            'avg_grade': np.float16((map_data['elevation'].iloc[-1] - map_data['elevation'].iloc[0]) / segment_data['distance'] * 100 if segment_data['distance'] > 0 else 0),
+            'max_grade': np.float16(line_segments_df['gradient'].max()),
+            'elevation_gain': np.int16(segment_data['elevation_gain']),
+            'start_latitude': np.float16(segment_data['start_latlng'][0]),
+            'start_longitude': np.float16(segment_data['start_latlng'][1]),
+            'end_latitude': np.float16(map_data['lat'].iloc[-1]),
+            'end_longitude': np.float16(map_data['lon'].iloc[-1]),
+            'avg_power': np.int16(user_inputs['power']),
+            'temperature': np.int8(weather_data['temperature']),
+            'wind_speed': np.int8(weather_data['wind_speed']),
+            'wind_direction': np.int16(weather_data['wind_direction']),
+        }
 
-        prediction = model.predict(input_data)
-        return int(prediction[0]) # Predicted time in seconds
+        response = requests.get(api_url, params=params)
+        response.raise_for_status()
+        prediction_data = response.json()
 
-    except ValueError as e:
-        if "feature_names mismatch" in str(e):
-            st.error("Model Mismatch Error: The loaded 'model.joblib' file is not trained to predict time.")
-            st.info("Please run the 'train_time_model.py' script to generate a new model file that predicts time based on power.")
-            return 720 # Return a default value
-        else:
-            st.error(f"An error occurred during prediction: {e}")
-            return 720
-    except Exception as e:
-        st.error(f"An error occurred during prediction: {e}")
+        # FIX: Use the correct key 'Seconds' from the API response.
+        return int(prediction_data['Seconds'])
+
+    except requests.exceptions.RequestException as e:
+        st.error(f"An error occurred while calling the prediction API: {e}")
+        st.error(f"API Response: {e.response.text}")
+        return 720 # Return a default value on error
+    except (KeyError, IndexError):
+        st.error("Received an unexpected response from the prediction API.")
+        st.write("The API returned the following data, but the app could not find the expected key:")
+        st.json(prediction_data)
         return 720
 
 
@@ -277,14 +267,17 @@ def show_main_app():
     athlete = st.session_state.athlete_info
     with st.sidebar:
         st.header(f"Welcome, {athlete['firstname']}! 👋")
-        st.image("https://aiguajoc.com/wp-content/uploads/Beneficios-de-practicar-el-cycling-AIGUAJOC.webp")
-        st.markdown("Enter your segment, target power, and planned ride time to get a time estimate.")
+        st.image(athlete["profile"])
+        st.markdown("Enter the segment, check your weight, and input power to get a time estimate.")
 
         st.markdown("---")
 
         st.header("1. Your Details & Segment")
-        segment_url = st.text_input("Strava Segment URL or ID:", value="https://www.strava.com/segments/13260861")
-        weight = st.number_input("Your Weight (kg):", min_value=40.0, max_value=150.0, value=75.0, step=0.5)
+        segment_url = st.text_input("Strava Segment URL or ID:", value="https://www.strava.com/segments/3319285")
+
+        # FIX: Safely get the athlete's weight, providing a default if it's None
+        default_weight = int(athlete.get('weight', 75) or 75)
+        weight = st.number_input("Your Weight (kg):", min_value=40, max_value=150, value=default_weight, step=1)
 
         st.header("2. Your Goal & Ride Time")
         if 'ride_date' not in st.session_state:
@@ -292,7 +285,7 @@ def show_main_app():
         if 'ride_time' not in st.session_state:
             st.session_state.ride_time = datetime.now().time()
 
-        desired_power = st.number_input("Target Power (Watts):", min_value=100, max_value=500, value=250, step=5)
+        desired_power = st.number_input("Target Power (Watts):", min_value=0, max_value=2000, value=250, step=1)
         max_forecast_date = date.today() + timedelta(days=14)
         st.date_input("Date of Ride:", key="ride_date", max_value=max_forecast_date)
         st.time_input("Time of Ride (24h):", key="ride_time")
@@ -327,8 +320,6 @@ def show_results_page():
     st.header("3. Your Pacing Plan")
     segment_id = inputs['segment'].split('/')[-1] if '/' in inputs['segment'] else inputs['segment']
 
-    model = load_model()
-
     with st.spinner("Fetching data and calculating your plan..."):
         segment_data = get_segment_data(segment_id, st.session_state.access_token)
         if not segment_data: return
@@ -352,7 +343,7 @@ def show_results_page():
         line_segments_df['gradient'] = line_segments_df.apply(lambda r: (r['elevation_change'] / r['distance_segment']) * 100 if r['distance_segment'] > 0 else 0, axis=1)
         line_segments_df['color'] = line_segments_df['gradient'].apply(get_color_from_gradient)
 
-        predicted_seconds = predict_time(model, segment_data, map_data, line_segments_df, weather_data, inputs)
+        predicted_seconds = predict_time_from_api(segment_data, map_data, line_segments_df, weather_data, inputs)
         predicted_time_str = f"{predicted_seconds // 60}:{predicted_seconds % 60:02d}"
 
         variable_power = (inputs['power'] + (line_segments_df['gradient'] * 10)).clip(lower=0)
@@ -396,7 +387,7 @@ def show_results_page():
                 data=map_data,
                 get_source_position="[lon, lat, 0]",
                 get_target_position="[lon, lat, smoothed_elevation]",
-                get_color="[180, 180, 180, 100]", # Light grey, semi-transparent
+                get_color="color",
                 get_width=1
             )
 
