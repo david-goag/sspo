@@ -8,7 +8,7 @@ class StravaAuth:
         self.client_id = st.secrets["STRAVA_CLIENT_ID"]
         self.client_secret = st.secrets["STRAVA_CLIENT_SECRET"]
         self.redirect_uri = st.secrets.get(
-            "STRAVA_REDIRECT_URI", "http://localhost:8501"
+            "STRAVA_REDIRECT_URI", "https://strava-optimizer.streamlit.app/"
         )
         self.auth_url = "https://www.strava.com/oauth/authorize"
         self.token_url = "https://www.strava.com/oauth/token"
