@@ -276,15 +276,15 @@ def show_main_app():
 
     athlete = st.session_state.athlete_info
     with st.sidebar:
-        st.header(f"Welcome, {athlete['firstname']}! 👋")
-        st.image("https://aiguajoc.com/wp-content/uploads/Beneficios-de-practicar-el-cycling-AIGUAJOC.webp")
-        st.markdown("Enter your segment, target power, and planned ride time to get a time estimate.")
+        st.header(f"Welcome, {st.session_state.access_token} {athlete['firstname']}! 👋")
+        st.image(athlete["profile"])#"https://aiguajoc.com/wp-content/uploads/Beneficios-de-practicar-el-cycling-AIGUAJOC.webp")
+        st.markdown("Enter the segment, check your weigth, and input power to get a time estimate.")
 
         st.markdown("---")
 
         st.header("1. Your Details & Segment")
-        segment_url = st.text_input("Strava Segment URL or ID:", value="https://www.strava.com/segments/13260861")
-        weight = st.number_input("Your Weight (kg):", min_value=40.0, max_value=150.0, value=75.0, step=0.5)
+        segment_url = st.text_input("Strava Segment URL or ID:", value="https://www.strava.com/segments/3319285")
+        weight = st.number_input("Your Weight (kg):", min_value=40, max_value=150, value=int(athlete['weight']), step=1)
 
         st.header("2. Your Goal & Ride Time")
         if 'ride_date' not in st.session_state:
@@ -292,7 +292,7 @@ def show_main_app():
         if 'ride_time' not in st.session_state:
             st.session_state.ride_time = datetime.now().time()
 
-        desired_power = st.number_input("Target Power (Watts):", min_value=100, max_value=500, value=250, step=5)
+        desired_power = st.number_input("Target Power (Watts):", min_value=0, max_value=2000, value=250, step=1)
         max_forecast_date = date.today() + timedelta(days=14)
         st.date_input("Date of Ride:", key="ride_date", max_value=max_forecast_date)
         st.time_input("Time of Ride (24h):", key="ride_time")
@@ -346,6 +346,10 @@ def show_results_page():
         map_data['cumulative_distance'] = map_data['distance_segment'].cumsum()
         map_data['smoothed_elevation'] = map_data['elevation'].rolling(window=15, center=True, min_periods=1).mean()
         map_data['elevation_next'] = map_data['smoothed_elevation'].shift(-1)
+        #Added by David
+        map_data['elevation_change'] = map_data['elevation_next'] - map_data['smoothed_elevation']
+        map_data['gradient'] = map_data.apply(lambda r: (r['elevation_change'] / r['distance_segment']) * 100 if r['distance_segment'] > 0 else 0, axis=1)
+        map_data['color'] = map_data['gradient'].apply(get_color_from_gradient)
 
         line_segments_df = map_data.dropna(subset=['lon_next', 'lat_next']).copy()
         line_segments_df['elevation_change'] = line_segments_df['elevation_next'] - line_segments_df['smoothed_elevation']
@@ -396,7 +400,7 @@ def show_results_page():
                 data=map_data,
                 get_source_position="[lon, lat, 0]",
                 get_target_position="[lon, lat, smoothed_elevation]",
-                get_color="[180, 180, 180, 100]", # Light grey, semi-transparent
+                get_color="color", #"[180, 180, 180, 100]", # Light grey, semi-transparent
                 get_width=1
             )
 
