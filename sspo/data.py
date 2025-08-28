@@ -50,7 +50,7 @@ def collect_data(client: StravaClient, segment_list: list) -> pd.DataFrame:
                 continue
 
             for j, powered_effort in enumerate(powered_segment_efforts):
-                print(f"     - Fetching data for effort {j+1}/{len(powered_segment_efforts)}...")
+                #print(f"     - Fetching data for effort {j+1}/{len(powered_segment_efforts)}...")
                 single_df = effort_to_df(athlete, segment, powered_effort)
                 data_df = pd.concat([data_df, single_df], axis=0)
                 time.sleep(0.5) # Small delay to be respectful to the weather API
