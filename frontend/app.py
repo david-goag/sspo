@@ -241,7 +241,7 @@ def show_authentication_page(auth):
         <h2 style='text-align: center; font-style: italic; font-weight: 400;'>Your personal pacing strategist for any Strava segment.</h2>
         <hr>
         <h3 style='text-align: center; font-weight: 400;'>🔐 Connect to Strava to begin</h3>
-        <a href="{auth_url}" target="_self" style="display: block; padding: 0.5em 1em; background-color: #FF4B4B; color: white; text-decoration: none; border-radius: 0.5rem; text-align: center; width: 100%; box-sizing: border-box;">🔗 Connect to Strava</a>
+        <a href="{auth_url}" target="_blank" style="display: block; padding: 0.5em 1em; background-color: #FF4B4B; color: white; text-decoration: none; border-radius: 0.5rem; text-align: center; width: 100%; box-sizing: border-box;">🔗 Connect to Strava</a>
     </div>
     """
 
