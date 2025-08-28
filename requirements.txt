@@ -20,3 +20,4 @@ uvicorn
 fastapi
 scikit-learn
 tqdm
+optuna
