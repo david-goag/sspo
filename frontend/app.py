@@ -302,8 +302,19 @@ def show_main_app():
             else:
                 st.warning("Please fill in all fields.")
 
-        if st.button("🚪 Logout"):
-            for key in st.session_state.keys():
+        if st.button(":door: Logout"):
+            if st.session_state.get("access_token"):
+                auth = StravaAuth()
+                with st.spinner("Logging out from Strava..."):
+                    success = auth.deauthorize(st.session_state.access_token)
+                    if success:
+                        st.success("Successfully logged out from Strava!")
+                    else:
+                        st.warning(
+                            "Could not revoke Strava access token, but clearing local session."
+                        )
+
+            for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
 

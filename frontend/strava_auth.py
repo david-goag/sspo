@@ -74,3 +74,13 @@ class StravaAuth:
         else:
             st.error(f"Error getting activities: {response.text}")
             return None
+
+    def deauthorize(self, access_token):
+        data = {"access_token": access_token}
+        response = requests.post("https://www.strava.com/oauth/deauthorize", data=data)
+
+        if response.status_code == 200:
+            return True
+        else:
+            st.error(f"Error deauthorizing from Strava: {response.text}")
+            return False
