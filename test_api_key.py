@@ -1,1 +1,1 @@
-https://api-879488749692.europe-west1.run.app/predict?athlete_weight=80&distance=10000&avg_grade=5&max_grade=10&elevation_gain=550&start_latitude=41.5&start_longitude=2.2&end_latitude=41.51&end_longitude=2.21&avg_power=250&temperature=25&wind_speed=10&wind_direction=100
+#https://api-879488749692.europe-west1.run.app/predict?athlete_weight=80&distance=10000&avg_grade=5&max_grade=10&elevation_gain=550&start_latitude=41.5&start_longitude=2.2&end_latitude=41.51&end_longitude=2.21&avg_power=250&temperature=25&wind_speed=10&wind_direction=100
