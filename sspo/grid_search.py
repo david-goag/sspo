@@ -32,14 +32,14 @@ def objective(trial: optuna.trial._trial.Trial, X_train: pd.DataFrame, X_test: p
     return rmse
 
 
-def optimize_model(X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.DataFrame, y_test: pd.DataFrame) -> XGBRegressor float:
+def optimize_model(X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.DataFrame, y_test: pd.DataFrame) -> tuple[XGBRegressor, float]:
     study = optuna.create_study()
     study.optimize(objective(X_train, X_test, y_train, y_test), n_trials=100)
     new_xgb_reg = XGBRegressor(**study.best_params, eval_metric=["rmse"], seed=42)
     new_xgb_reg.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=0)
     new_rmse = round(mean_squared_error(y_test.values, new_xgb_reg.predict(X_test))**0.5, 2)
 
-    return new_xgb_reg, new_rmse
+    return (new_xgb_reg, new_rmse)
 
 
 def get_best_model_path() -> str:
@@ -55,6 +55,7 @@ def get_best_model_path() -> str:
 
     return xgb_path
 
+def 
     current_xgb_reg = load_xgb_reg(xgb_path)
     current_xgb_reg.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=0)
     current_rmse = round(mean_squared_error(y_test.values, current_xgb_reg.predict(X_test))**0.5, 2)
@@ -71,7 +72,7 @@ def main():
     X = df.drop(columns=['time'])
     y = df.time
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    optimize_model(X_train, X_test, y_train, y_test)
+    new_xgb_reg, new_rmse = optimize_model(X_train, X_test, y_train, y_test)
 
     current_xgb_reg = load_xgb_reg(get_best_model_path())
     current_xgb_reg.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=0)
