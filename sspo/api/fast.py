@@ -38,6 +38,7 @@ def predict(
     wind_direction: int
     ):
 
+
     X_pred = pd.DataFrame(dict(
         athlete_weight=[np.int8(athlete_weight)],
         distance=[np.int32(distance)],
