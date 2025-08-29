@@ -16,7 +16,8 @@ from bs4 import BeautifulSoup
 
 # Import the helper classes/functions from your separate files
 from strava_auth import StravaAuth
-from strava_scraper import scrape_leaderboard
+# The scrape_leaderboard function is no longer needed as we are implementing it directly
+# from strava_scraper import scrape_leaderboard
 
 # --- CONFIGURATION ---
 st.set_page_config(
@@ -60,18 +61,43 @@ def predict_time_from_api(segment_data, map_data, line_segments_df, weather_data
         response.raise_for_status()
         prediction_data = response.json()
 
-        return int(prediction_data['Seconds'])
+        return int(prediction_data['Seconds']), params
 
     except requests.exceptions.RequestException as e:
         st.error(f"An error occurred while calling the prediction API: {e}")
         st.error(f"API Response: {e.response.text}")
-        return None
+        return None, params
     except (KeyError, IndexError):
         st.error("Received an unexpected response from the prediction API.")
         st.write("The API returned the following data, but the app could not find the expected key:")
         st.json(prediction_data)
-        return None
+        return None, params
 
+def find_power_for_target_time(target_seconds, segment_data, map_data, line_segments_df, weather_data, user_inputs):
+    """Iteratively finds the power required to meet a target time."""
+    current_power = user_inputs['power']
+
+    with st.spinner("Calculating power needed for Top 10..."):
+        for _ in range(20): # Limit iterations to prevent infinite loops
+            inputs_for_calc = user_inputs.copy()
+            inputs_for_calc['power'] = current_power
+
+            predicted_time, _ = predict_time_from_api(segment_data, map_data, line_segments_df, weather_data, inputs_for_calc)
+
+            if predicted_time is None:
+                return None # API error occurred
+
+            if predicted_time <= target_seconds:
+                return current_power # Success!
+
+            time_diff = predicted_time - target_seconds
+            power_adjustment = max(1, int(time_diff / 5))
+            current_power += power_adjustment
+
+            if current_power > 1000: # Safety break
+                return None
+
+    return None # Could not find a suitable power
 
 # --- API HELPER FUNCTIONS ---
 @st.cache_data
@@ -191,6 +217,32 @@ def degrees_to_cardinal(d):
     dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
     ix = round(d / (360. / len(dirs)))
     return dirs[ix % len(dirs)]
+
+def parse_time_to_seconds(time_str):
+    """Converts a time string like '7m 27s', '7:27', or '48s' to seconds."""
+    if pd.isna(time_str): return None
+    time_str = str(time_str)
+
+    total_seconds = 0
+    if 'h' in time_str:
+        parts = time_str.split('h')
+        total_seconds += int(parts[0]) * 3600
+        time_str = parts[1].strip()
+    if 'm' in time_str:
+        parts = time_str.split('m')
+        total_seconds += int(parts[0]) * 60
+        time_str = parts[1].strip()
+    if 's' in time_str:
+        total_seconds += int(time_str.replace('s', '').strip())
+    elif ':' in time_str:
+        parts = time_str.split(':')
+        if len(parts) == 2:
+            total_seconds += int(parts[0]) * 60 + int(parts[1])
+        elif len(parts) == 3:
+            total_seconds += int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+
+    return total_seconds if total_seconds > 0 else None
+
 
 # --- UI PAGES ---
 def set_bg_hack(url):
@@ -339,7 +391,7 @@ def show_results_page():
         line_segments_df['gradient'] = line_segments_df.apply(lambda r: (r['elevation_change'] / r['distance_segment']) * 100 if r['distance_segment'] > 0 else 0, axis=1)
         line_segments_df['color'] = line_segments_df['gradient'].apply(get_color_from_gradient)
 
-        predicted_seconds = predict_time_from_api(segment_data, map_data, line_segments_df, weather_data, inputs)
+        predicted_seconds, api_params = predict_time_from_api(segment_data, map_data, line_segments_df, weather_data, inputs)
 
         if predicted_seconds is None:
             return
@@ -352,6 +404,9 @@ def show_results_page():
         segment_bearing = calculate_bearing(map_data['lat'].iloc[0], map_data['lon'].iloc[0], map_data['lat'].iloc[-1], map_data['lon'].iloc[-1])
         wind_desc = get_wind_description(segment_bearing, weather_data['wind_direction'])
         wind_cardinal = degrees_to_cardinal(weather_data['wind_direction'])
+
+        with st.expander("API Parameters Sent for Prediction"):
+            st.json(api_params)
 
         st.subheader(f"Segment: [{segment_data['name']}](https://www.strava.com/segments/{segment_id})")
 
@@ -424,10 +479,76 @@ def show_results_page():
         st.markdown("---")
         st.subheader("🏆 Segment Leaderboard Comparison")
 
-        response = requests.get(f"https://www.strava.com/segments/{segment_id}")
-        soup = BeautifulSoup(response.content, "html.parser")
-        df = pd.read_html(soup.find("table").prettify())[0]
-        st.table(df)
+        leaderboard_df = None # Initialize to handle potential errors
+        try:
+            response = requests.get(f"https://www.strava.com/segments/{segment_id}")
+            response.raise_for_status()
+            soup = BeautifulSoup(response.content, "html.parser")
+
+            table = soup.find("table")
+            if table:
+                raw_df = pd.read_html(table.prettify())[0]
+
+                # Robustly select and rename columns by position
+                if raw_df.shape[1] >= 4:
+                    leaderboard_df = raw_df.iloc[:, [0, 2, 3, -1]].copy()
+                    leaderboard_df.columns = ['Rank', 'Athlete', 'Date', 'Time']
+
+                    leaderboard_df['Time (s)'] = leaderboard_df['Time'].apply(parse_time_to_seconds)
+                    leaderboard_df.dropna(subset=['Time (s)'], inplace=True)
+                    leaderboard_df['Time (s)'] = leaderboard_df['Time (s)'].astype(int)
+                else:
+                    st.warning("Could not parse the leaderboard structure as expected.")
+                    leaderboard_df = None
+            else:
+                st.info("Could not find a leaderboard table on the segment page.")
+        except Exception as e:
+            st.error(f"An error occurred while scraping the leaderboard: {e}")
+
+
+        if leaderboard_df is not None and not leaderboard_df.empty:
+            predicted_rank = leaderboard_df[leaderboard_df['Time (s)'] < predicted_seconds].shape[0] + 1
+            predicted_rank_placeholder.metric("Predicted Rank", f"~{predicted_rank}", help="Estimated rank based on the public leaderboard.")
+
+            if predicted_rank <= 10:
+                user_effort = pd.DataFrame([{
+                    "Rank": "★",
+                    "Athlete": f"{st.session_state.athlete_info['firstname']} (Your Prediction)",
+                    "Time": predicted_time_str,
+                    "Time (s)": predicted_seconds,
+                    "Date": "Forecast"
+                }])
+                display_df = pd.concat([leaderboard_df, user_effort]).sort_values(by="Time (s)").head(10)
+            else:
+                display_df = leaderboard_df.head(10)
+
+            display_df = display_df.drop(columns=['Time (s)'], errors='ignore')
+            display_df.reset_index(drop=True, inplace=True)
+            display_df['Rank'] = display_df.index + 1
+
+            def highlight_user(row):
+                if "(Your Prediction)" in str(row['Athlete']):
+                    return ['background-color: #FF4B4B; color: white'] * len(row)
+                return [''] * len(row)
+
+            st.dataframe(
+                display_df[['Rank', 'Athlete', 'Time', 'Date']].style.apply(highlight_user, axis=1),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            if predicted_rank > 10 and len(leaderboard_df) >= 10:
+                time_to_beat = leaderboard_df.iloc[9]['Time (s)']
+                power_for_top_10 = find_power_for_target_time(time_to_beat, segment_data, map_data, line_segments_df, weather_data, inputs)
+                if power_for_top_10:
+                    power_diff = power_for_top_10 - inputs['power']
+                    st.warning(f"🎯 To break into the Top 10, you would need to hold an average of **{power_for_top_10} W** (+{power_diff} W).")
+                else:
+                    st.info("Could not calculate the power required for a Top 10 finish.")
+
+        else:
+            st.info("Could not display leaderboard at this time.")
+
 
 # --- MAIN ROUTER ---
 def main():
