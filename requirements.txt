@@ -22,3 +22,4 @@ scikit-learn
 tqdm
 lxml
 optuna
+bs4
