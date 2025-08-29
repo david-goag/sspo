@@ -356,8 +356,6 @@ def show_main_app():
             else:
                 st.warning("Please fill in all fields.")
 
-<<<<<<< HEAD
-=======
         if st.button(":door: Logout"):
             if st.session_state.get("access_token"):
                 auth = StravaAuth()
@@ -374,7 +372,6 @@ def show_main_app():
                 del st.session_state[key]
             st.rerun()
 
->>>>>>> 3b3de1c64d90ec8134a4159029390c5235643707
     st.title("Pacing Optimizer Dashboard")
 
     if 'prediction_inputs' in st.session_state:
