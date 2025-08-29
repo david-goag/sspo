@@ -8,7 +8,7 @@ class StravaAuth:
         self.client_id = st.secrets["STRAVA_CLIENT_ID"]
         self.client_secret = st.secrets["STRAVA_CLIENT_SECRET"]
         self.redirect_uri = st.secrets.get(
-            "STRAVA_REDIRECT_URI", "http://localhost:8501"
+            "STRAVA_REDIRECT_URI", "https://strava-optimizer.streamlit.app/"
         )
         self.auth_url = "https://www.strava.com/oauth/authorize"
         self.token_url = "https://www.strava.com/oauth/token"
@@ -74,3 +74,13 @@ class StravaAuth:
         else:
             st.error(f"Error getting activities: {response.text}")
             return None
+
+    def deauthorize(self, access_token):
+        data = {"access_token": access_token}
+        response = requests.post("https://www.strava.com/oauth/deauthorize", data=data)
+
+        if response.status_code == 200:
+            return True
+        else:
+            st.error(f"Error deauthorizing from Strava: {response.text}")
+            return False

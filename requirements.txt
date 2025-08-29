@@ -21,3 +21,4 @@ fastapi
 scikit-learn
 tqdm
 lxml
+optuna

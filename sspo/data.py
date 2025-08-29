@@ -12,13 +12,10 @@ import time # To add a small delay and be respectful to APIs
 print("=============================================")
 print("      Starting Strava Data Collection        ")
 print("=============================================")
-try:
-    ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
-    SEGMENT_LIST = os.environ["SEGMENT_LIST"].split(",")
-    print("✅ Environment variables loaded successfully.")
-except KeyError as e:
-    print(f"❌ Error: Environment variable {e} not set. Please set your ACCESS_TOKEN and SEGMENT_LIST.")
-    exit()
+ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
+SEGMENT_LIST = os.environ["SEGMENT_LIST"].split(",")
+print("✅ Environment variables loaded successfully.")
+
 
 client = StravaClient(access_token=ACCESS_TOKEN)
 athlete = client.get_athlete()

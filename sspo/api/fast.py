@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 
 app = FastAPI()
-xgb_reg = pickle.load(open('xgb_reg.pkl', 'rb'))
+xgb_reg = pickle.load(open('xgb_reg_24_54.pkl', 'rb'))
 app.state.model = xgb_reg
 
 # Allowing all middleware is optional, but good practice for dev purposes
@@ -37,6 +37,7 @@ def predict(
     wind_speed: int,
     wind_direction: int
     ):
+
 
     X_pred = pd.DataFrame(dict(
         athlete_weight=[np.int8(athlete_weight)],
