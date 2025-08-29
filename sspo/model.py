@@ -67,6 +67,16 @@ def save_xgb_reg(xgb_reg: XGBRegressor, path: str) -> None:
 
     print(f"💾 Model successfully saved to '{file_path}'")
 
+def load_xgb_reg(path: str) -> XGBRegressor:
+    """Saves the trained model to a file using pickle."""
+    print("\n--- Loading Model ---")
+    file_path = Path(path)
+    xgb_reg = pickle.load(open(file_path, 'rb'))
+
+    print(f"📎 Model successfully loaded from '{file_path}'")
+
+    return xgb_reg
+
 
 if __name__ == "__main__":
     print("=============================================")
