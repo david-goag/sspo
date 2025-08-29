@@ -6,16 +6,17 @@ import polyline
 import requests
 import pydeck as pdk
 import plotly.graph_objects as go
-import joblib
-import xgboost
 from plotly.subplots import make_subplots
 from datetime import datetime, date, time, timedelta
 from urllib.parse import urlparse, parse_qs
 import math
 import time as time_sleep # Import the time module for sleeping
+from bs4 import BeautifulSoup
 
-# Import the authentication logic from your separate file
+
+# Import the helper classes/functions from your separate files
 from strava_auth import StravaAuth
+from strava_scraper import scrape_leaderboard
 
 # --- CONFIGURATION ---
 st.set_page_config(
@@ -39,7 +40,6 @@ def predict_time_from_api(segment_data, map_data, line_segments_df, weather_data
     api_url = "https://api-879488749692.europe-west1.run.app/predict"
 
     try:
-        # Ensure all parameters are cast to the exact data types the model expects.
         params = {
             'athlete_weight': np.int8(user_inputs['weight']),
             'distance': np.int32(segment_data['distance']),
@@ -60,18 +60,17 @@ def predict_time_from_api(segment_data, map_data, line_segments_df, weather_data
         response.raise_for_status()
         prediction_data = response.json()
 
-        # FIX: Use the correct key 'Seconds' from the API response.
         return int(prediction_data['Seconds'])
 
     except requests.exceptions.RequestException as e:
         st.error(f"An error occurred while calling the prediction API: {e}")
         st.error(f"API Response: {e.response.text}")
-        return 720 # Return a default value on error
+        return None
     except (KeyError, IndexError):
         st.error("Received an unexpected response from the prediction API.")
         st.write("The API returned the following data, but the app could not find the expected key:")
         st.json(prediction_data)
-        return 720
+        return None
 
 
 # --- API HELPER FUNCTIONS ---
@@ -148,7 +147,7 @@ def get_elevation_data(map_df):
             response.raise_for_status()
             data = response.json()
             all_elevations.extend(data['elevation'])
-            time_sleep.sleep(1) # Add a 1-second delay to avoid hitting rate limits
+            time_sleep.sleep(1)
         except requests.exceptions.RequestException as e:
             st.error(f"Failed to fetch elevation data: {e}")
             return None
@@ -171,7 +170,6 @@ def get_color_from_gradient(gradient):
     else: return [0, 0, 255, 200]
 
 def calculate_bearing(lat1, lon1, lat2, lon2):
-    """Calculates the bearing between two points."""
     lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
     dLon = lon2 - lon1
     x = math.sin(dLon) * math.cos(lat2)
@@ -180,7 +178,6 @@ def calculate_bearing(lat1, lon1, lat2, lon2):
     return (math.degrees(initial_bearing) + 360) % 360
 
 def get_wind_description(segment_bearing, wind_direction):
-    """Determines if the wind is a headwind, tailwind, or crosswind."""
     diff = abs(segment_bearing - wind_direction)
     angle = min(diff, 360 - diff)
     if angle <= 45:
@@ -191,7 +188,6 @@ def get_wind_description(segment_bearing, wind_direction):
         return "Crosswind"
 
 def degrees_to_cardinal(d):
-    """Converts degrees to a cardinal direction."""
     dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
     ix = round(d / (360. / len(dirs)))
     return dirs[ix % len(dirs)]
@@ -205,7 +201,7 @@ def set_bg_hack(url):
              background-image: url("{url}");
              background-attachment: fixed;
              background-size: cover;
-             background-position: center 20%; /* Move the background image up */
+             background-position: center 20%;
          }}
          </style>
          """,
@@ -215,17 +211,16 @@ def set_bg_hack(url):
 def show_authentication_page(auth):
     set_bg_hack("https://trello-backgrounds.s3.amazonaws.com/SharedBackground/2560x1440/1609b2cc34793439f41f21b944076194/photo-1534787238916-9ba6764efd4f.webp")
 
-    # Custom CSS for the glass effect and white text
     st.markdown("""
         <style>
         .glass-container {
-            background: rgba(0, 0, 0, 0.1); /* Lighter semi-transparent background */
+            background: rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(3px);
-            -webkit-backdrop-filter: blur(3px); /* Smoother blur */
+            -webkit-backdrop-filter: blur(3px);
             border-radius: 10px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             padding: 30px;
-            color: white; /* Ensure text inside is white */
+            color: white;
         }
         .glass-container h1, .glass-container h2, .glass-container h3, .glass-container p, .glass-container li {
             color: white !important;
@@ -245,19 +240,21 @@ def show_authentication_page(auth):
     </div>
     """
 
-    # Use columns to center the login card
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         st.markdown(login_html, unsafe_allow_html=True)
 
 
 def show_main_app():
-    # Custom CSS to make the sidebar wider
     st.markdown(
         """
         <style>
+            .main .block-container {
+                padding-top: 1rem;
+                padding-bottom: 1rem;
+            }
             [data-testid="stSidebar"] {
-                width: 400px !important; # Set the width to your desired value
+                width: 400px !important;
             }
         </style>
         """,
@@ -266,16 +263,21 @@ def show_main_app():
 
     athlete = st.session_state.athlete_info
     with st.sidebar:
-        st.header(f"Welcome, {athlete['firstname']}! 👋")
-        st.image(athlete["profile"])
+        st.image(athlete["profile"], width=60)
+        with st.popover(f"Welcome, {athlete['firstname']}!", use_container_width=True):
+             if st.button("Logout", use_container_width=True):
+                for key in st.session_state.keys():
+                    del st.session_state[key]
+                st.rerun()
+
+        st.header("Pacing Optimizer")
         st.markdown("Enter the segment, check your weight, and input power to get a time estimate.")
 
         st.markdown("---")
 
         st.header("1. Your Details & Segment")
-        segment_url = st.text_input("Strava Segment URL or ID:", value="https://www.strava.com/segments/3319285")
+        segment_url = st.text_input("Strava Segment URL or ID:", value="https://www.strava.com/segments/13260861")
 
-        # FIX: Safely get the athlete's weight, providing a default if it's None
         default_weight = int(athlete.get('weight', 75) or 75)
         weight = st.number_input("Your Weight (kg):", min_value=40, max_value=150, value=default_weight, step=1)
 
@@ -302,11 +304,6 @@ def show_main_app():
             else:
                 st.warning("Please fill in all fields.")
 
-        if st.button("🚪 Logout"):
-            for key in st.session_state.keys():
-                del st.session_state[key]
-            st.rerun()
-
     st.title("Pacing Optimizer Dashboard")
 
     if 'prediction_inputs' in st.session_state:
@@ -317,7 +314,6 @@ def show_main_app():
 
 def show_results_page():
     inputs = st.session_state.prediction_inputs
-    st.header("3. Your Pacing Plan")
     segment_id = inputs['segment'].split('/')[-1] if '/' in inputs['segment'] else inputs['segment']
 
     with st.spinner("Fetching data and calculating your plan..."):
@@ -335,7 +331,7 @@ def show_results_page():
         map_data['lon_next'] = map_data['lon'].shift(-1)
         map_data['distance_segment'] = map_data.apply(lambda r: haversine_np(r['lon'], r['lat'], r['lon_next'], r['lat_next']) if pd.notna(r['lon_next']) else 0, axis=1)
         map_data['cumulative_distance'] = map_data['distance_segment'].cumsum()
-        map_data['smoothed_elevation'] = map_data['elevation'].rolling(window=15, center=True, min_periods=1).mean()
+        map_data['smoothed_elevation'] = map_data['elevation'].rolling(window=25, center=True, min_periods=1).mean()
         map_data['elevation_next'] = map_data['smoothed_elevation'].shift(-1)
 
         line_segments_df = map_data.dropna(subset=['lon_next', 'lat_next']).copy()
@@ -344,7 +340,12 @@ def show_results_page():
         line_segments_df['color'] = line_segments_df['gradient'].apply(get_color_from_gradient)
 
         predicted_seconds = predict_time_from_api(segment_data, map_data, line_segments_df, weather_data, inputs)
+
+        if predicted_seconds is None:
+            return
+
         predicted_time_str = f"{predicted_seconds // 60}:{predicted_seconds % 60:02d}"
+        avg_speed_kmh = (segment_data['distance'] / predicted_seconds) * 3.6 if predicted_seconds > 0 else 0
 
         variable_power = (inputs['power'] + (line_segments_df['gradient'] * 10)).clip(lower=0)
 
@@ -354,72 +355,50 @@ def show_results_page():
 
         st.subheader(f"Segment: [{segment_data['name']}](https://www.strava.com/segments/{segment_id})")
 
-        avg_grade = (map_data['elevation'].iloc[-1] - map_data['elevation'].iloc[0]) / segment_data['distance'] * 100 if segment_data['distance'] > 0 else 0
-        stat_col1, stat_col2, stat_col3 = st.columns(3)
-        stat_col1.metric("Distance", f"{segment_data['distance']/1000:.2f} km")
-        stat_col2.metric("Elevation Gain", f"{segment_data['elevation_gain']:.0f} m")
-        stat_col3.metric("Avg. Grade", f"{avg_grade:.1f}%")
+        main_col, map_col = st.columns([1, 1])
 
-        st.markdown("---")
+        with main_col:
+            st.subheader("📊 Prediction & Conditions")
+            with st.container(border=True):
+                pred_col, stats_col = st.columns([2,1.5])
+                with pred_col:
+                    st.markdown(f"<h3 style='text-align: center;'>Predicted Time</h3>", unsafe_allow_html=True)
+                    st.markdown(f"<h1 style='text-align: center; color: #FF4B4B;'>{predicted_time_str}</h1>", unsafe_allow_html=True)
+                    st.metric("Average Speed", f"{avg_speed_kmh:.1f} km/h", help="Based on the predicted time and segment distance.")
+                    st.info(f"Estimate for an average power of {inputs['power']} W.")
 
-        # --- Create a two-column layout for the results ---
-        col1, col2 = st.columns(2)
+                with stats_col:
+                    avg_grade = (map_data['elevation'].iloc[-1] - map_data['elevation'].iloc[0]) / segment_data['distance'] * 100 if segment_data['distance'] > 0 else 0
+                    st.metric("Distance", f"{segment_data['distance']/1000:.2f} km")
+                    st.metric("Elevation Gain", f"{segment_data['elevation_gain']:.0f} m")
+                    st.metric("Avg. Grade", f"{avg_grade:.1f}%")
+                    predicted_rank_placeholder = st.empty()
 
-        with col1:
+                st.markdown("---")
+                weather_cols = st.columns(3)
+                weather_cols[0].metric("Temperature", f"{weather_data['temperature']}°C")
+                weather_cols[1].metric("Wind Direction", f"{wind_cardinal} - {wind_desc}")
+                weather_cols[2].metric("Wind Speed", f"{weather_data['wind_speed']:.1f} km/h")
+
+
+        with map_col:
             st.subheader("🗺️ 3D Segment Map")
             if "MAPBOX_API_KEY" not in st.secrets:
                 st.error("Mapbox API key not found.")
                 return
 
-            mapbox_key = st.secrets["MAPBOX_API_KEY"]
+            view_state = pdk.ViewState(latitude=map_data["lat"].mean(), longitude=map_data["lon"].mean(), zoom=13.5, pitch=60, bearing=0)
 
-            view_state = pdk.ViewState(latitude=map_data["lat"].mean(), longitude=map_data["lon"].mean(), zoom=13, pitch=60, bearing=0)
-
-            # Layer for the 3D, color-coded elevation line
-            line_layer = pdk.Layer(
-                "LineLayer", data=line_segments_df, get_source_position="[lon, lat, smoothed_elevation]",
-                get_target_position="[lon_next, lat_next, elevation_next]", get_color="color", get_width=5, pickable=True
-            )
-
-            # Layer for the vertical lines connecting the 3D path to the 2D map
-            vertical_line_layer = pdk.Layer(
-                "LineLayer",
-                data=map_data,
-                get_source_position="[lon, lat, 0]",
-                get_target_position="[lon, lat, smoothed_elevation]",
-                get_color="color",
-                get_width=1
-            )
-
-            start_point, end_point = map_data.iloc[[0]], map_data.iloc[[-1]]
-            start_icon = {"url": "https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/icon-start.png", "width": 128, "height": 128, "anchorY": 128}
-            end_icon = {"url": "https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/icon-finish.png", "width": 128, "height": 128, "anchorY": 128}
-            start_point['icon_data'] = [start_icon]
-            end_point['icon_data'] = [end_icon]
-
+            line_layer = pdk.Layer("LineLayer", data=line_segments_df, get_source_position="[lon, lat, smoothed_elevation]", get_target_position="[lon_next, lat_next, elevation_next]", get_color="color", get_width=5, pickable=True)
+            vertical_line_layer = pdk.Layer("LineLayer", data=map_data, get_source_position="[lon, lat, 0]", get_target_position="[lon, lat, smoothed_elevation]", get_color="color", get_width=1)
+            start_point, end_point = map_data.iloc[[0]].copy(), map_data.iloc[[-1]].copy()
+            start_point.loc[:, 'icon_data'] = [ {"url": "https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/icon-start.png", "width": 128, "height": 128, "anchorY": 128} ]
+            end_point.loc[:, 'icon_data'] = [ {"url": "https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/icon-finish.png", "width": 128, "height": 128, "anchorY": 128} ]
             icon_layer = pdk.Layer("IconLayer", data=pd.concat([start_point, end_point]), get_icon="icon_data", get_position="[lon, lat, elevation]", get_size=4, size_scale=15)
+            wind_arrow_data = pd.DataFrame([{"lon": map_data['lon'].mean(), "lat": map_data['lat'].mean(), "icon_data": {"url": "https://raw.githubusercontent.com/ajduberstein/wind-js/master/arrow.png", "width": 512, "height": 512, "anchorY": 256}, "angle": 450 - weather_data['wind_direction']}])
+            wind_arrow_layer = pdk.Layer("IconLayer", data=wind_arrow_data, get_icon="icon_data", get_position="[lon, lat]", get_size=10, size_scale=30, get_angle="angle")
 
-            wind_arrow_data = pd.DataFrame([{
-                "lon": map_data['lon'].mean(),
-                "lat": map_data['lat'].mean(),
-                "icon_data": {
-                    "url": "https://raw.githubusercontent.com/ajduberstein/wind-js/master/arrow.png",
-                    "width": 512, "height": 512, "anchorY": 256
-                },
-                "angle": 450 - weather_data['wind_direction']
-            }])
-
-            wind_arrow_layer = pdk.Layer(
-                "IconLayer", data=wind_arrow_data, get_icon="icon_data", get_position="[lon, lat]",
-                get_size=10, size_scale=30, get_angle="angle"
-            )
-
-            st.pydeck_chart(pdk.Deck(
-                map_style="mapbox://styles/mapbox/dark-v10",
-                layers=[line_layer, vertical_line_layer, icon_layer, wind_arrow_layer],
-                initial_view_state=view_state,
-                tooltip={"html": "<b>Gradient:</b> {gradient:.1f}%"}
-            ))
+            st.pydeck_chart(pdk.Deck(map_style="mapbox://styles/mapbox/dark-v10", layers=[line_layer, vertical_line_layer, icon_layer, wind_arrow_layer], initial_view_state=view_state, tooltip={"html": "<b>Gradient:</b> {gradient:.1f}%"}))
 
             st.markdown("""
                 **Effort Scale:**
@@ -430,46 +409,25 @@ def show_results_page():
                 <span style="color:#CC0000; font-weight:bold;">● Max</span>
             """, unsafe_allow_html=True)
 
-        with col2:
-            st.subheader("📊 Time Prediction & Conditions")
+        st.markdown("---")
+        st.subheader("📈 Variable Power & Elevation Profile")
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        fig.add_trace(go.Scatter(x=map_data['cumulative_distance'] / 1000, y=map_data['smoothed_elevation'], name="Elevation", fill='tozeroy', line=dict(color='grey'), customdata=np.stack((line_segments_df['gradient'],), axis=-1), hovertemplate="<b>Distance:</b> %{x:.2f} km<br><b>Elevation:</b> %{y:.1f} m<br><b>Grade:</b> %{customdata[0]:.1f}%<extra></extra>"), secondary_y=False)
+        fig.add_trace(go.Scatter(x=line_segments_df['cumulative_distance'] / 1000, y=variable_power, name="Power Plan", line=dict(color='red'), hovertemplate="<b>Power:</b> %{y:.0f} W<extra></extra>"), secondary_y=True)
+        fig.update_layout(title_text="Pacing Plan vs. Elevation Profile", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), hovermode="x unified")
+        fig.update_xaxes(title_text="Distance (km)")
+        fig.update_yaxes(title_text="Elevation (m)", secondary_y=False)
+        fig.update_yaxes(title_text="Power (W)", secondary_y=True)
+        st.plotly_chart(fig, use_container_width=True)
 
-            sub_col1, sub_col2 = st.columns(2)
-            with sub_col1:
-                st.metric("Predicted Time", value=predicted_time_str)
-                st.info(f"Estimate for an average power of {inputs['power']} W.")
-            with sub_col2:
-                st.write(f"**Forecast for {inputs['ride_datetime'].strftime('%Y-%m-%d %H:%M')}**")
-                st.metric("Wind Speed", f"{weather_data['wind_speed']:.1f} km/h")
-                st.metric("Wind Direction", f"{wind_cardinal} - {wind_desc}")
-                st.metric("Temperature", f"{weather_data['temperature']}°C")
+        # --- LEADERBOARD SECTION ---
+        st.markdown("---")
+        st.subheader("🏆 Segment Leaderboard Comparison")
 
-            st.markdown("---")
-
-            st.subheader("📈 Variable Power & Elevation Profile")
-            fig = make_subplots(specs=[[{"secondary_y": True}]])
-            fig.add_trace(
-                go.Scatter(
-                    x=map_data['cumulative_distance'] / 1000, y=map_data['smoothed_elevation'], name="Elevation",
-                    fill='tozeroy', line=dict(color='grey'),
-                    customdata=np.stack((line_segments_df['gradient'],), axis=-1),
-                    hovertemplate="<b>Distance:</b> %{x:.2f} km<br><b>Elevation:</b> %{y:.1f} m<br><b>Grade:</b> %{customdata[0]:.1f}%<extra></extra>"
-                ), secondary_y=False,
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=line_segments_df['cumulative_distance'] / 1000, y=variable_power, name="Power Plan",
-                    line=dict(color='red'), hovertemplate="<b>Power:</b> %{y:.0f} W<extra></extra>"
-                ), secondary_y=True,
-            )
-            fig.update_layout(
-                title_text="Pacing Plan vs. Elevation Profile",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                hovermode="x unified"
-            )
-            fig.update_xaxes(title_text="Distance (km)")
-            fig.update_yaxes(title_text="Elevation (m)", secondary_y=False)
-            fig.update_yaxes(title_text="Power (W)", secondary_y=True)
-            st.plotly_chart(fig, use_container_width=True)
+        response = requests.get(f"https://www.strava.com/segments/{segment_id}")
+        soup = BeautifulSoup(response.content, "html.parser")
+        df = pd.read_html(soup.find("table").prettify())[0]
+        st.table(df)
 
 # --- MAIN ROUTER ---
 def main():

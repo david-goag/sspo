@@ -5,6 +5,7 @@ __pycache__/
 .streamlit/
 *.toml
 */.streamlit
+notebooks/
 # C extensions
 *.so
 .python-version

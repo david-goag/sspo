@@ -20,7 +20,7 @@ class StravaAuth:
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
             "approval_prompt": "force",
-            "scope": "read,activity:read_all",
+            "scope": "read_all,activity:read_all", # FIX: Added 'read_all' for leaderboard access
         }
         return f"{self.auth_url}?{urlencode(params)}"
 
