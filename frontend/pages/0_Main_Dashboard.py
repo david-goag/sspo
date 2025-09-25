@@ -402,7 +402,7 @@ def show_main_app():
 
         col_seg, col_weight = st.columns(2)
         with col_seg:
-            segment_url = st.text_input("Strava Segment URL or ID:", value=12550955)
+            segment_url = st.text_input("Strava Segment URL or ID:", value=38078350)
         with col_weight:
             default_weight = int(athlete.get("weight", 75) or 75)
             weight = st.number_input(
@@ -493,7 +493,7 @@ def show_results_page(inputs):
                 "❌ Unable to load segment data. Please try a different segment or check the error message above."
             )
             st.info(
-                "💡 Try using a public segment like 13260861 (the default) or find a public segment on Strava."
+                "💡 Try using a public segment like 38078350 (the default) or find a public segment on Strava."
             )
             return
 

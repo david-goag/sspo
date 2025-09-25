@@ -101,7 +101,21 @@ def predict_df(request: FromFrontend):
     line_segments_df = pd.DataFrame(line_segments_dict)
     weather_data = request.weather_data
     user_inputs = request.user_inputs
-    distance_split = round(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 400) + 1), 2) + 0.01 #Use equal distance segments close to the mode (~400m)  # Use 500-meter segments to match training data
+    #distance_split = round(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 400) + 1), 2) + 0.01 #Use equal distance segments close to the mode (~400m)  # Use 500-meter segments to match training data
+    if line_segments_df.cumulative_distance.max() > 15000:
+        distance_split = round(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 800) + 1), 2) + 0.01
+    if line_segments_df.cumulative_distance.max() > 11000:
+        distance_split = round(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 600) + 1), 2) + 0.01
+    if line_segments_df.cumulative_distance.max() > 8500:
+        distance_split = round(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 500) + 1), 2) + 0.01
+    if line_segments_df.cumulative_distance.max() > 5500:
+        distance_split = round(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 400) + 1), 2) + 0.01
+    if line_segments_df.cumulative_distance.max() > 3500:
+        distance_split = round(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 300) + 1), 2) + 0.01
+    if line_segments_df.cumulative_distance.max() > 2000:
+        distance_split = round(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 220) + 1), 2) + 0.01
+    else:
+        distance_split = round(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 170) + 1), 2) + 0.01
 
     line_segments_df["id"] = line_segments_df.cumulative_distance.apply(
         lambda x: int(x / distance_split)
