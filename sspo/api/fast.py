@@ -101,7 +101,7 @@ def predict_df(request: FromFrontend):
     line_segments_df = pd.DataFrame(line_segments_dict)
     weather_data = request.weather_data
     user_inputs = request.user_inputs
-    distance_split = round(float(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 400) + 1), 2) + 0.01 #Use equal distance segments close to the mode (~400m)  # Use 500-meter segments to match training data
+    distance_split = 400 #round(float(line_segments_df.cumulative_distance.max() / ((line_segments_df.cumulative_distance.max() // 400) + 1), 2) + 0.01 #Use equal distance segments close to the mode (~400m)  # Use 500-meter segments to match training data
 
     line_segments_df["id"] = line_segments_df.cumulative_distance.apply(
         lambda x: int(x / distance_split)
