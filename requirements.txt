@@ -26,3 +26,4 @@ bs4
 geopy
 google-cloud-storage
 fitparse
+comet_ml
