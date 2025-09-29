@@ -13,29 +13,25 @@ def run_comet_experiment(filename: str) -> None:
     workspace="david-goag"
     )
 
+    # Load trained model
     xgb_reg = load_xgb_reg(filename)
 
+    # Log model parameters (XGBoost hyperparameters)
+    model_params = xgb_reg.get_params()
+    experiment.log_parameters(model_params)
 
+    # Log additional metadata
+    experiment.log_parameters({
+        "model_filename": filename,
+        "model_type": "XGBRegressor",
+        "framework": "XGBoost"
+    })
 
-def load_xgb_reg(filename: str) -> XGBRegressor:
-    """Loads the trained model in the cloud to a local file using pickle."""
-    print("\n--- Loading Model ---")
+    # Log the model to Comet
+    experiment.log_model(filename, "model.pkl")
 
-    BUCKET_NAME = os.environ["BUCKET_NAME"]
-    storage_filename = f"models/{filename}.pkl"
-    local_filename = "model.pkl"
-
-    client = storage.Client()
-    bucket = client.bucket(BUCKET_NAME)
-    blob = bucket.blob(storage_filename)
-    blob.download_to_filename(local_filename)
-
-    file_path = Path(local_filename)
-    xgb_reg = pickle.load(open(file_path, 'rb'))
-
-    print(f"📎 Model {filename}.pkl successfully loaded from Google Cloud into '{file_path}'")
-
-    return xgb_reg
+    print(f"✅ Model {filename} logged to Comet ML successfully")
+    experiment.end()
 
 
 if __name__ == "__main__":
@@ -43,7 +39,7 @@ if __name__ == "__main__":
     print("            Starting comet.py           ")
     print("=============================================")
 
-    run_comet_experiment("model_500m_no_power_max")
+    run_comet_experiment("xgb_reg_5_84")
 
     print("\n=============================================")
     print("          Script finished successfully       ")
