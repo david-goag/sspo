@@ -19,8 +19,9 @@ class FromFrontend(BaseModel):
 
 
 app = FastAPI()
-best_model_name = get_best_model_filename()
-xgb_reg = load_xgb_reg(best_model_name)
+#best_model_name = get_best_model_filename()
+#xgb_reg = load_xgb_reg(best_model_name)
+xgb_reg = pickle.load(open("xgb_reg_5_84.pkl", "rb"))
 #model_data = pickle.load(open("model_500m_no_power_max.pkl", "rb"))
 #app.state.model = model_data["model"]
 app.state.model = xgb_reg
