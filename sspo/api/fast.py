@@ -19,10 +19,11 @@ class FromFrontend(BaseModel):
 
 
 app = FastAPI()
-# best_model_name = get_best_model_filename()
-# xgb_reg = load_xgb_reg(best_model_name)
-model_data = pickle.load(open("model_500m_no_power_max.pkl", "rb"))
-app.state.model = model_data["model"]
+best_model_name = get_best_model_filename()
+xgb_reg = load_xgb_reg(best_model_name)
+#model_data = pickle.load(open("model_500m_no_power_max.pkl", "rb"))
+#app.state.model = model_data["model"]
+app.state.model = xgb_reg
 
 # Allowing all middleware is optional, but good practice for dev purposes
 app.add_middleware(

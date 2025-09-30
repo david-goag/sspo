@@ -28,8 +28,8 @@ def optimize_model(
     def objective(trial: optuna.trial._trial.Trial) -> float:
         print(f"  - Running Trial #{trial.number}... ", end="")
         params = {
-            "n_estimators": trial.suggest_int("n_estimators", 500, 2000),
-            "max_depth": trial.suggest_int("max_depth", 3, 11),
+            "n_estimators": trial.suggest_int("n_estimators", 700, 2200),
+            "max_depth": trial.suggest_int("max_depth", 5, 15),
             "max_leaves": trial.suggest_int("max_leaves", 0, 5),
             "grow_policy": trial.suggest_categorical(
                 "grow_policy", ["depthwise", "lossguide"]
@@ -39,10 +39,10 @@ def optimize_model(
             ),
             "n_jobs": -1,
             "subsample": trial.suggest_categorical(
-                "subsample", [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+                "subsample", [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
             ),
             "colsample_bylevel": trial.suggest_categorical(
-                "colsample_bylevel", [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+                "colsample_bylevel", [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
             ),
             "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 100, log=True),
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 100, log=True),
@@ -57,7 +57,7 @@ def optimize_model(
 
         return rmse
 
-    study.optimize(objective, n_trials=2)
+    study.optimize(objective, n_trials=100)
     print("✅ Optimization complete.")
     print(f"🏆 Best Trial #{study.best_trial.number} achieved RMSE: {study.best_value}")
     print("📊 Best Parameters Found:")
@@ -105,10 +105,11 @@ def get_best_model_filename() -> str:
 def retrain_model() -> None:
     # NEED TO BE REPLACED WITH THE CLOUD DATABASE
     print("\n--- Starting Model Retraining and Evaluation ---")
-    file_path = Path("database/current/10475048_data.parquet")
+    file_path = Path("database/test_fit/all_athletes_20250903175112.parquet")
     df = pd.read_parquet(file_path)
     print(f"✅ Data loaded successfully from '{file_path}'. Shape: {df.shape}")
-    df.set_index("id", inplace=True)
+    #df.set_index("id", inplace=True)
+    df = df.drop(columns=["power_max"])
     X = df.drop(columns=["time"])
     y = df.time
     X_train, X_test, y_train, y_test = train_test_split(
