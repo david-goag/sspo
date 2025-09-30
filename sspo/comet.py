@@ -72,7 +72,7 @@ if __name__ == "__main__":
     print("            Starting comet.py           ")
     print("=============================================")
 
-    run_comet_experiment("xgb_reg_5_84")
+    run_comet_experiment("model_500m_no_power_max")
 
     print("\n=============================================")
     print("          Script finished successfully       ")

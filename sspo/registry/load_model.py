@@ -19,7 +19,19 @@ def load_xgb_reg(filename: str) -> XGBRegressor:
     blob.download_to_filename(local_filename)
 
     file_path = Path(local_filename)
-    xgb_reg = pickle.load(open(file_path, 'rb'))
+    loaded_object = pickle.load(open(file_path, 'rb'))
+
+    # Handle different save formats
+    if isinstance(loaded_object, XGBRegressor):
+        # Already the correct type
+        xgb_reg = loaded_object
+        print(f"📎 Model {filename}.pkl loaded as XGBRegressor")
+    elif isinstance(loaded_object, dict) and 'model' in loaded_object:
+        # Extract model from dictionary
+        xgb_reg = loaded_object['model']
+        print(f"📎 Model {filename}.pkl extracted from dictionary")
+    else:
+        raise TypeError(f"Unexpected model format: {type(loaded_object)}")
 
     print(f"📎 Model {filename}.pkl successfully loaded from Google Cloud into '{file_path}'")
 
