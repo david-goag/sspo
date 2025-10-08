@@ -27,3 +27,5 @@ geopy
 google-cloud-storage
 fitparse
 comet_ml
+shap
+matplotlib
